@@ -16,6 +16,7 @@ import (
 	"math"
 	"math/rand"
 	"os"
+	"strconv"
 )
 
 //!-main
@@ -46,11 +47,22 @@ func main() {
 	// the pseudo-random number generator using the current time.
 	// Thanks to Randall McPherson for pointing out the omission.
 	rand.Seed(time.Now().UTC().UnixNano())
+	cycles := 5.0
 
 	if len(os.Args) > 1 && os.Args[1] == "web" {
 		//!+http
 		handler := func(w http.ResponseWriter, r *http.Request) {
-			lissajous(w)
+			// Exercise 1.12
+			// Handle a user defined cycles value
+			err := r.ParseForm()
+			if err == nil {
+				requestedValue, getCycleErr := strconv.Atoi(r.FormValue("cycles"))
+				if getCycleErr == nil {
+					cycles = float64(requestedValue)
+				}
+			}
+			lissajous(w, cycles)
+
 		}
 		http.HandleFunc("/", handler)
 		//!-http
@@ -58,12 +70,11 @@ func main() {
 		return
 	}
 	//!+main
-	lissajous(os.Stdout)
+	lissajous(os.Stdout, cycles)
 }
 
-func lissajous(out io.Writer) {
-	const (
-		cycles  = 5     // number of complete x oscillator revolutions
+func lissajous(out io.Writer, cycles float64) {
+	const ( // number of complete x oscillator revolutions
 		res     = 0.001 // angular resolution
 		size    = 100   // image canvas covers [-size..+size]
 		nframes = 64    // number of animation frames
