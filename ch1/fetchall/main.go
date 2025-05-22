@@ -17,15 +17,21 @@ import (
 )
 
 func main() {
+	// Exercise 1.10: fetchall prints its output to a file instead of stdout.
+	file, err := os.Create("fetchall.txt")
+	if err != nil {
+		fmt.Printf("Error creating file: %v\n", err)
+	}
+	defer file.Close()
 	start := time.Now()
 	ch := make(chan string)
 	for _, url := range os.Args[1:] {
 		go fetch(url, ch) // start a goroutine
 	}
 	for range os.Args[1:] {
-		fmt.Println(<-ch) // receive from channel ch
+		fmt.Fprintln(file, <-ch) // receive from channel ch
 	}
-	fmt.Printf("%.2fs elapsed\n", time.Since(start).Seconds())
+	fmt.Fprintf(file, "%.2fs elapsed\n", time.Since(start).Seconds())
 }
 
 func fetch(url string, ch chan<- string) {
