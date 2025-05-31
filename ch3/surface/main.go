@@ -49,11 +49,23 @@ func main() {
 			bx, by := corner(i, j)
 			cx, cy := corner(i, j+1)
 			dx, dy := corner(i+1, j+1)
+			if anyIsNan(ax, ay, bx, by, cx, cy, dx, dy) {
+				continue
+			}
 			fmt.Fprintf(out, "<polygon points='%g,%g %g,%g %g,%g %g,%g'/>\n",
 				ax, ay, bx, by, cx, cy, dx, dy)
 		}
 	}
 	fmt.Fprintf(out, "</svg>")
+}
+
+func anyIsNan(values ...float64) bool {
+	for _, value := range values {
+		if math.IsNaN(value) {
+			return true
+		}
+	}
+	return false
 }
 
 func corner(i, j int) (float64, float64) {
@@ -63,6 +75,11 @@ func corner(i, j int) (float64, float64) {
 
 	// Compute surface height z.
 	z := f(x, y)
+	// Handle the case where z can be a non-finite
+	// value that will produce invalid polygons
+	if math.IsNaN(z) || math.IsInf(z, 0) {
+		return math.NaN(), math.NaN()
+	}
 
 	// Project (x,y,z) isometrically onto 2-D SVG canvas (sx,sy).
 	sx := width/2 + (x-y)*cos30*xyscale
