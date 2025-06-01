@@ -14,6 +14,14 @@ import (
 	"os"
 )
 
+type Point struct {
+	x, y, z float64
+}
+
+type Polygon struct {
+	a, b, c, d Point
+}
+
 const (
 	width, height = 600, 320            // canvas size in pixels
 	cells         = 100                 // number of grid cells
@@ -49,7 +57,7 @@ func main() {
 		f = defaultSurface // default function if no argument is provided
 	}
 	var out io.Writer
-	file, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE, 0600)
+	file, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
 		fmt.Printf("Error opening file %q: %v", filename, err)
 		fmt.Println("Defaulting to stdout")
@@ -60,22 +68,43 @@ func main() {
 		// Defer closing the file before main returns
 		defer file.Close()
 	}
+
+	// Collect all valid polygons first
+	var polygons []Polygon
+	for i := 0; i < cells; i++ {
+		for j := 0; j < cells; j++ {
+			a := corner(i+1, j, f)
+			b := corner(i, j, f)
+			c := corner(i, j+1, f)
+			d := corner(i+1, j+1, f)
+			if anyIsNan(a.x, a.y, b.x, b.y, c.x, c.y, d.x, d.y) {
+				continue
+			}
+			polygons = append(polygons, Polygon{a, b, c, d})
+		}
+	}
+	// Find the minimum and maximum z values
+	minZ, maxZ := math.Inf(1), math.Inf(-1)
+	for _, poly := range polygons {
+		for _, p := range []Point{poly.a, poly.b, poly.c, poly.d} {
+			if p.z < minZ {
+				minZ = p.z
+			}
+			if p.z > maxZ {
+				maxZ = p.z
+			}
+		}
+	}
+	// Dump the SVG header
 	fmt.Fprintf(out, "<svg xmlns='http://www.w3.org/2000/svg' "+
 		"style='stroke: grey; fill: white; stroke-width: 0.7' "+
 		"width='%d' height='%d'>", width, height)
-
-	for i := 0; i < cells; i++ {
-		for j := 0; j < cells; j++ {
-			ax, ay := corner(i+1, j, f)
-			bx, by := corner(i, j, f)
-			cx, cy := corner(i, j+1, f)
-			dx, dy := corner(i+1, j+1, f)
-			if anyIsNan(ax, ay, bx, by, cx, cy, dx, dy) {
-				continue
-			}
-			fmt.Fprintf(out, "<polygon points='%g,%g %g,%g %g,%g %g,%g'/>\n",
-				ax, ay, bx, by, cx, cy, dx, dy)
-		}
+	// Output polygons with color
+	for _, poly := range polygons {
+		avgZ := (poly.a.z + poly.b.z + poly.c.z + poly.d.z) / 4
+		color := colorForZ(avgZ, minZ, maxZ)
+		fmt.Fprintf(out, "<polygon points='%g,%g %g,%g %g,%g %g,%g' fill='%s'/>\n",
+			poly.a.x, poly.a.y, poly.b.x, poly.b.y, poly.c.x, poly.c.y, poly.d.x, poly.d.y, color)
 	}
 	fmt.Fprintf(out, "</svg>")
 }
@@ -89,7 +118,7 @@ func anyIsNan(values ...float64) bool {
 	return false
 }
 
-func corner(i, j int, f func(x, y float64) float64) (float64, float64) {
+func corner(i, j int, f func(x, y float64) float64) Point {
 	// Find point (x,y) at corner of cell (i,j).
 	x := xyrange * (float64(i)/cells - 0.5)
 	y := xyrange * (float64(j)/cells - 0.5)
@@ -99,13 +128,24 @@ func corner(i, j int, f func(x, y float64) float64) (float64, float64) {
 	// Handle the case where z can be a non-finite
 	// value that will produce invalid polygons
 	if math.IsNaN(z) || math.IsInf(z, 0) {
-		return math.NaN(), math.NaN()
+		return Point{math.NaN(), math.NaN(), math.NaN()}
 	}
 
 	// Project (x,y,z) isometrically onto 2-D SVG canvas (sx,sy).
 	sx := width/2 + (x-y)*cos30*xyscale
 	sy := height/2 + (x+y)*sin30*xyscale - z*zscale
-	return sx, sy
+	return Point{sx, sy, z}
+}
+
+func colorForZ(z, minZ, maxZ float64) string {
+	if maxZ == minZ {
+		return "#888888"
+	}
+	t := (z - minZ) / (maxZ - minZ)
+	r := int(255 * t)
+	g := 0
+	b := int(255 * (1 - t))
+	return fmt.Sprintf("#%02x%02x%02x", r, g, b)
 }
 
 func defaultSurface(x, y float64) float64 {
