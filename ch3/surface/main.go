@@ -8,10 +8,13 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"io"
 	"math"
+	"net/http"
 	"os"
+	"strconv"
 )
 
 type Point struct {
@@ -22,39 +25,61 @@ type Polygon struct {
 	a, b, c, d Point
 }
 
-const (
-	width, height = 600, 320            // canvas size in pixels
-	cells         = 100                 // number of grid cells
-	xyrange       = 30.0                // axis ranges (-xyrange..+xyrange)
-	xyscale       = width / 2 / xyrange // pixels per x or y unit
-	zscale        = height * 0.4        // pixels per z unit
-	angle         = math.Pi / 6         // angle of x, y axes (=30°)
-)
+type RenderingOptions struct {
+	width, height, cells     int
+	xyrange, xyscale, zscale float64
+	angle                    float64
+}
 
-var sin30, cos30 = math.Sin(angle), math.Cos(angle) // sin(30°), cos(30°)
+type UserOptions struct {
+	width, height, cells int
+}
+
+func getRenderingOptions(opts UserOptions) RenderingOptions {
+	// Default rendering options
+	xyrange := 30.0
+	xyscale := float64(opts.width) / 2 / xyrange
+	zscale := float64(opts.height) * 0.4
+	return RenderingOptions{
+		width:   opts.width,
+		height:  opts.height,
+		cells:   opts.cells,
+		xyrange: xyrange,
+		xyscale: xyscale,
+		zscale:  zscale,
+	}
+}
+
+var defaultOptions RenderingOptions
+
+func init() {
+	width, height := 600, 320 // canvas size in pixels
+	cells := 100              // number of grid cells
+	defaultOptions = getRenderingOptions(UserOptions{
+		width:  width,
+		height: height,
+		cells:  cells,
+	})
+}                         // to protect currentOptions
+const rad30 = math.Pi / 6 // 30 degrees in radians
+
+var sin30, cos30 = math.Sin(rad30), math.Cos(rad30) // sin(30°), cos(30°)
 
 func main() {
-	filename := "surface.svg"
+	web := flag.Bool("web", false, "run as web server")
+	flag.Parse()
+	if *web {
+		fmt.Println("Running as web server. Output will be served at http://localhost:8080/surface")
+		http.HandleFunc("/surface", surfaceHandler)
+		http.ListenAndServe(":8080", nil)
+		return
+	}
+	// If no web flag is set, run as a command line tool
 	// check whether there is a command line argument for the function to use
-	var f func(x, y float64) float64
-	if len(os.Args) > 1 {
-		switch os.Args[1] {
-		case "eggbox":
-			f = eggBox
-			filename = "eggbox.svg"
-		case "saddle":
-			f = saddle
-			filename = "saddle.svg"
-		case "moguls":
-			f = moguls
-			filename = "moguls.svg"
-		default:
-			fmt.Printf("Unknown function %q, using default surface function.\n", os.Args[1])
-			f = defaultSurface
-		}
-	} else {
-		fmt.Println("No function argument provided, using default surface function.")
-		f = defaultSurface // default function if no argument is provided
+	f := defaultSurface // default function
+	filename := "surface.svg"
+	if flag.NArg() > 0 {
+		f = getSurfaceFunction(flag.Arg(0))
 	}
 	var out io.Writer
 	file, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
@@ -68,15 +93,70 @@ func main() {
 		// Defer closing the file before main returns
 		defer file.Close()
 	}
+	renderSVG(out, f, defaultOptions)
+}
 
+func getSurfaceFunction(name string) func(x, y float64) float64 {
+	switch name {
+	case "eggbox":
+		return eggBox
+	case "saddle":
+		return saddle
+	case "moguls":
+		return moguls
+	default:
+		return defaultSurface // default function if no match
+	}
+}
+
+func surfaceHandler(w http.ResponseWriter, r *http.Request) {
+	// Set the content type to SVG
+	w.Header().Set("Content-Type", "image/svg+xml")
+
+	// Get the surface type from the query parameter
+	surfaceType := r.URL.Query().Get("type")
+	userHeight := r.URL.Query().Get("height")
+	userWidth := r.URL.Query().Get("width")
+	userCells := r.URL.Query().Get("cells")
+	// some defaults
+	userOpts := UserOptions{
+		width:  defaultOptions.width,
+		height: defaultOptions.height,
+		cells:  defaultOptions.cells,
+	}
+	if userHeight != "" {
+		if height, err := strconv.Atoi(userHeight); err == nil {
+			userOpts.height = height
+		}
+	}
+	if userWidth != "" {
+		if width, err := strconv.Atoi(userWidth); err == nil {
+			userOpts.width = width
+		}
+	}
+	if userCells != "" {
+		if cells, err := strconv.Atoi(userCells); err == nil {
+			userOpts.cells = cells
+		}
+	}
+	userSurfaceOptions := getRenderingOptions(userOpts)
+	f := getSurfaceFunction(surfaceType)
+	// Render the SVG directly to the response writer
+	renderSVG(w, f, userSurfaceOptions)
+}
+
+func renderSVG(out io.Writer, f func(x, y float64) float64, opts RenderingOptions) {
 	// Collect all valid polygons first
+	cells := opts.cells
+	width := opts.width
+	height := opts.height
 	var polygons []Polygon
 	for i := 0; i < cells; i++ {
 		for j := 0; j < cells; j++ {
-			a := corner(i+1, j, f)
-			b := corner(i, j, f)
-			c := corner(i, j+1, f)
-			d := corner(i+1, j+1, f)
+			a := corner(i+1, j, f, opts)
+			b := corner(i, j, f, opts)
+			c := corner(i, j+1, f, opts)
+			d := corner(i+1, j+1, f, opts)
 			if anyIsNan(a.x, a.y, b.x, b.y, c.x, c.y, d.x, d.y) {
 				continue
 			}
@@ -118,8 +198,14 @@ func anyIsNan(values ...float64) bool {
 	return false
 }
 
-func corner(i, j int, f func(x, y float64) float64) Point {
+func corner(i, j int, f func(x, y float64) float64, opts RenderingOptions) Point {
 	// Find point (x,y) at corner of cell (i,j).
+	xyrange := opts.xyrange
+	cells := float64(opts.cells)
+	xyscale := opts.xyscale
+	zscale := opts.zscale
+	width := float64(opts.width)
+	height := float64(opts.height)
 	x := xyrange * (float64(i)/cells - 0.5)
 	y := xyrange * (float64(j)/cells - 0.5)
 
