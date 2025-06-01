@@ -27,6 +27,27 @@ var sin30, cos30 = math.Sin(angle), math.Cos(angle) // sin(30°), cos(30°)
 
 func main() {
 	filename := "surface.svg"
+	// check whether there is a command line argument for the function to use
+	var f func(x, y float64) float64
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "eggbox":
+			f = eggBox
+			filename = "eggbox.svg"
+		case "saddle":
+			f = saddle
+			filename = "saddle.svg"
+		case "moguls":
+			f = moguls
+			filename = "moguls.svg"
+		default:
+			fmt.Printf("Unknown function %q, using default surface function.\n", os.Args[1])
+			f = defaultSurface
+		}
+	} else {
+		fmt.Println("No function argument provided, using default surface function.")
+		f = defaultSurface // default function if no argument is provided
+	}
 	var out io.Writer
 	file, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE, 0600)
 	if err != nil {
@@ -45,10 +66,10 @@ func main() {
 
 	for i := 0; i < cells; i++ {
 		for j := 0; j < cells; j++ {
-			ax, ay := corner(i+1, j)
-			bx, by := corner(i, j)
-			cx, cy := corner(i, j+1)
-			dx, dy := corner(i+1, j+1)
+			ax, ay := corner(i+1, j, f)
+			bx, by := corner(i, j, f)
+			cx, cy := corner(i, j+1, f)
+			dx, dy := corner(i+1, j+1, f)
 			if anyIsNan(ax, ay, bx, by, cx, cy, dx, dy) {
 				continue
 			}
@@ -68,7 +89,7 @@ func anyIsNan(values ...float64) bool {
 	return false
 }
 
-func corner(i, j int) (float64, float64) {
+func corner(i, j int, f func(x, y float64) float64) (float64, float64) {
 	// Find point (x,y) at corner of cell (i,j).
 	x := xyrange * (float64(i)/cells - 0.5)
 	y := xyrange * (float64(j)/cells - 0.5)
@@ -87,9 +108,24 @@ func corner(i, j int) (float64, float64) {
 	return sx, sy
 }
 
-func f(x, y float64) float64 {
+func defaultSurface(x, y float64) float64 {
 	r := math.Hypot(x, y) // distance from (0,0)
 	return math.Sin(r) / r
+}
+
+func eggBox(x, y float64) float64 {
+	// Eggbox function: f(x,y) = sin(x) * cos(y)
+	return math.Sin(x) * math.Cos(y)
+}
+
+func saddle(x, y float64) float64 {
+	// Saddle function: f(x,y) = x^2 - y^2
+	return (x*x - y*y) / 100.0
+}
+
+func moguls(x, y float64) float64 {
+	// Moguls: wavy bumps using sine and cosine
+	return math.Sin(x) * math.Cos(y) / 2
 }
 
 //!-
