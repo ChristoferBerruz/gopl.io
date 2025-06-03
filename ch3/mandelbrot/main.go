@@ -36,12 +36,45 @@ func main() {
 
 	img := image.NewRGBA(image.Rect(0, 0, width, height))
 	for py := 0; py < height; py++ {
-		y := float64(py)/height*(ymax-ymin) + ymin
 		for px := 0; px < width; px++ {
-			x := float64(px)/width*(xmax-xmin) + xmin
-			z := complex(x, y)
-			// Image point (px, py) represents complex value z.
-			img.Set(px, py, mandelbrot(z))
+			// x, y represent a pixel. To get the color of the pixel
+			// we can do a supersampling of diving the pixel into 4 subpixels
+			// and averaging the color of the subpixels.
+			var subpixelColors []color.Color
+			for subpy := 0; subpy < 2; subpy++ {
+				deltay := float64(subpy) / 2.0
+				for subpx := 0; subpx < 2; subpx++ {
+					// Calculate the subpixel coordinates
+					deltax := float64(subpx) / 2.0
+					y := (float64(py)+deltay)/height*(ymax-ymin) + ymin
+					x := (float64(px)+deltax)/width*(xmax-xmin) + xmin
+					// Get the color of the subpixel
+					z := complex(x, y)
+					subpixelColors = append(subpixelColors, mandelbrot(z))
+				}
+			}
+			// Average the colors of the subpixels, allocate uint32 to match RGBA
+			var r, g, b, a uint32
+			for _, c := range subpixelColors {
+				r1, g1, b1, a1 := c.RGBA()
+				r += r1
+				g += g1
+				b += b1
+				a += a1
+			}
+			// Divide by the number of subpixels to get the average color
+			numSubpixels := uint32(len(subpixelColors))
+			r /= numSubpixels
+			g /= numSubpixels
+			b /= numSubpixels
+			a /= numSubpixels
+			avgColor := color.RGBA{
+				R: uint8(r >> 8),
+				G: uint8(g >> 8),
+				B: uint8(b >> 8),
+				A: uint8(a >> 8),
+			}
+			img.Set(px, py, avgColor) // Set the pixel color in the image
 		}
 	}
 	png.Encode(out, img) // NOTE: ignoring errors
