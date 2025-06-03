@@ -55,10 +55,34 @@ func mandelbrot(z complex128) color.Color {
 	for n := uint8(0); n < iterations; n++ {
 		v = v*v + z
 		if cmplx.Abs(v) > 2 {
-			return color.Gray{255 - contrast*n}
+			hue := float64(n) / float64(iterations)
+			return hsvToRGB(hue, 1, 1) // Convert to RGB
 		}
 	}
 	return color.Black
+}
+
+// Simple HSV to RGB conversion
+func hsvToRGB(h, s, v float64) color.Color {
+	i := int(h * 6)
+	f := h*6 - float64(i)
+	p := v * (1 - s)
+	q := v * (1 - f*s)
+	t := v * (1 - (1-f)*s)
+	switch i % 6 {
+	case 0:
+		return color.RGBA{uint8(v * 255), uint8(t * 255), uint8(p * 255), 255}
+	case 1:
+		return color.RGBA{uint8(q * 255), uint8(v * 255), uint8(p * 255), 255}
+	case 2:
+		return color.RGBA{uint8(p * 255), uint8(v * 255), uint8(t * 255), 255}
+	case 3:
+		return color.RGBA{uint8(p * 255), uint8(q * 255), uint8(v * 255), 255}
+	case 4:
+		return color.RGBA{uint8(t * 255), uint8(p * 255), uint8(v * 255), 255}
+	default:
+		return color.RGBA{uint8(v * 255), uint8(p * 255), uint8(q * 255), 255}
+	}
 }
 
 //!-
