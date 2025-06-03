@@ -8,9 +8,11 @@
 package main
 
 import (
+	"fmt"
 	"image"
 	"image/color"
 	"image/png"
+	"io"
 	"math/cmplx"
 	"os"
 )
@@ -20,6 +22,17 @@ func main() {
 		xmin, ymin, xmax, ymax = -2, -2, +2, +2
 		width, height          = 1024, 1024
 	)
+	filename := "mandelbrot.png"
+	var out io.Writer
+	handle, err := os.Create(filename)
+	if err != nil {
+		fmt.Printf("Error creating file %s: %v\n. Using stdout instead.", filename, err)
+		out = os.Stdout
+	} else {
+		fmt.Printf("Created file %s.\n", filename)
+		defer handle.Close()
+		out = handle
+	}
 
 	img := image.NewRGBA(image.Rect(0, 0, width, height))
 	for py := 0; py < height; py++ {
@@ -31,7 +44,7 @@ func main() {
 			img.Set(px, py, mandelbrot(z))
 		}
 	}
-	png.Encode(os.Stdout, img) // NOTE: ignoring errors
+	png.Encode(out, img) // NOTE: ignoring errors
 }
 
 func mandelbrot(z complex128) color.Color {
@@ -69,8 +82,9 @@ func sqrt(z complex128) color.Color {
 // f(x) = x^4 - 1
 //
 // z' = z - f(z)/f'(z)
-//    = z - (z^4 - 1) / (4 * z^3)
-//    = z - (z - 1/z^3) / 4
+//
+//	= z - (z^4 - 1) / (4 * z^3)
+//	= z - (z - 1/z^3) / 4
 func newton(z complex128) color.Color {
 	const iterations = 37
 	const contrast = 7
