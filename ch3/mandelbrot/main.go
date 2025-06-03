@@ -12,27 +12,24 @@ import (
 	"image"
 	"image/color"
 	"image/png"
-	"io"
 	"math/cmplx"
 	"os"
 )
 
 func main() {
+	drawFractal("mandelbrot.png", mandelbrot)
+	drawFractal("newton.png", newton)
+	drawFractal("acos.png", acos)
+	drawFractal("sqrt.png", sqrt)
+}
+
+func drawFractal(filename string, fractalFunc func(complex128) color.Color) {
 	const (
 		xmin, ymin, xmax, ymax = -2, -2, +2, +2
 		width, height          = 1024, 1024
 	)
-	filename := "mandelbrot.png"
-	var out io.Writer
-	handle, err := os.Create(filename)
-	if err != nil {
-		fmt.Printf("Error creating file %s: %v\n. Using stdout instead.", filename, err)
-		out = os.Stdout
-	} else {
-		fmt.Printf("Created file %s.\n", filename)
-		defer handle.Close()
-		out = handle
-	}
+	handle, _ := os.Create(filename)
+	defer handle.Close() // Close the file when we're done
 
 	img := image.NewRGBA(image.Rect(0, 0, width, height))
 	for py := 0; py < height; py++ {
@@ -50,7 +47,7 @@ func main() {
 					x := (float64(px)+deltax)/width*(xmax-xmin) + xmin
 					// Get the color of the subpixel
 					z := complex(x, y)
-					subpixelColors = append(subpixelColors, mandelbrot(z))
+					subpixelColors = append(subpixelColors, fractalFunc(z))
 				}
 			}
 			// Average the colors of the subpixels, allocate uint32 to match RGBA
@@ -77,7 +74,8 @@ func main() {
 			img.Set(px, py, avgColor) // Set the pixel color in the image
 		}
 	}
-	png.Encode(out, img) // NOTE: ignoring errors
+	png.Encode(handle, img) // NOTE: ignoring errors
+	fmt.Printf("Successfully drew fractal to %s\n", filename)
 }
 
 func mandelbrot(z complex128) color.Color {
@@ -143,12 +141,35 @@ func sqrt(z complex128) color.Color {
 //	= z - (z^4 - 1) / (4 * z^3)
 //	= z - (z - 1/z^3) / 4
 func newton(z complex128) color.Color {
+	// z is the guess for the root of the equation z^4 - 1 = 0.
 	const iterations = 37
-	const contrast = 7
-	for i := uint8(0); i < iterations; i++ {
-		z -= (z - 1/(z*z*z)) / 4
-		if cmplx.Abs(z*z*z*z-1) < 1e-6 {
-			return color.Gray{255 - contrast*i}
+	const epsilon = 1e-6
+
+	// The four roots of z^4 = 1
+	roots := []complex128{
+		1,
+		-1,
+		complex(0, 1),
+		complex(0, -1),
+	}
+	var n int
+	for n = 0; n < iterations; n++ {
+		z = z - (z*z*z*z-1)/(4*z*z*z)
+		for i, root := range roots {
+			if cmplx.Abs(z-root) < epsilon {
+				// Color by root and shade by iterations
+				shade := uint8(255 - uint8(255*n/iterations))
+				switch i {
+				case 0:
+					return color.RGBA{shade, 0, 0, 255} // Red
+				case 1:
+					return color.RGBA{0, shade, 0, 255} // Green
+				case 2:
+					return color.RGBA{0, 0, shade, 255} // Blue
+				case 3:
+					return color.RGBA{shade, shade, 0, 255} // Yellow
+				}
+			}
 		}
 	}
 	return color.Black
