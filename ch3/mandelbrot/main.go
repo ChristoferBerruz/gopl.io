@@ -8,29 +8,67 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"image"
 	"image/color"
 	"image/png"
+	"io"
+	"log"
 	"math/cmplx"
+	"net/http"
 	"os"
 )
 
 func main() {
-	drawFractal("mandelbrot.png", mandelbrot)
-	drawFractal("newton.png", newton)
-	drawFractal("acos.png", acos)
-	drawFractal("sqrt.png", sqrt)
+	web := flag.Bool("web", false, "Run in web mode")
+	flag.Parse()
+	if *web {
+		fmt.Println("Running in web mode")
+		http.HandleFunc("/fractals", webHandler)
+		fmt.Println("Serving fractals at http://localhost:8080/fractals")
+		log.Fatal(http.ListenAndServe(":8080", nil))
+	} else {
+		drawFractal("mandelbrot.png", mandelbrot)
+		drawFractal("newton.png", newton)
+		drawFractal("acos.png", acos)
+		drawFractal("sqrt.png", sqrt)
+	}
+}
+
+func webHandler(w http.ResponseWriter, r *http.Request) {
+	// Serve the fractals as PNG images
+	w.Header().Set("Content-Type", "image/png")
+	// Get the fractal from the query parameter
+	fractal := r.URL.Query().Get("fractal")
+	var fractalFunc func(complex128) color.Color
+	switch fractal {
+	case "mandelbrot":
+		fractalFunc = mandelbrot
+	case "newton":
+		fractalFunc = newton
+	case "acos":
+		fractalFunc = acos
+	case "sqrt":
+		fractalFunc = sqrt
+	default:
+		fractalFunc = mandelbrot
+	}
+	renderFractal(w, fractalFunc)
 }
 
 func drawFractal(filename string, fractalFunc func(complex128) color.Color) {
+	handle, _ := os.Create(filename)
+	defer handle.Close() // Close the file when we're done
+	renderFractal(handle, fractalFunc)
+	fmt.Printf("Successfully drew fractal to %s\n", filename)
+}
+
+func renderFractal(out io.Writer, fractalFunc func(complex128) color.Color) {
 	const (
 		xmin, ymin, xmax, ymax = -2, -2, +2, +2
 		width, height          = 1024, 1024
 	)
-	handle, _ := os.Create(filename)
-	defer handle.Close() // Close the file when we're done
-
 	img := image.NewRGBA(image.Rect(0, 0, width, height))
 	for py := 0; py < height; py++ {
 		for px := 0; px < width; px++ {
@@ -74,8 +112,7 @@ func drawFractal(filename string, fractalFunc func(complex128) color.Color) {
 			img.Set(px, py, avgColor) // Set the pixel color in the image
 		}
 	}
-	png.Encode(handle, img) // NOTE: ignoring errors
-	fmt.Printf("Successfully drew fractal to %s\n", filename)
+	png.Encode(out, img) // NOTE: ignoring errors
 }
 
 func mandelbrot(z complex128) color.Color {
