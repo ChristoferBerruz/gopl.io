@@ -18,7 +18,26 @@ import (
 	"math/cmplx"
 	"net/http"
 	"os"
+	"strconv"
 )
+
+type RenderingOptions struct {
+	Xmin, Xmax float64
+	Ymin, Ymax float64
+	Zoom       float64
+	Width      int
+	Height     int
+}
+
+var defaultOptions = RenderingOptions{
+	Xmin:   -2,
+	Xmax:   2,
+	Ymin:   -2,
+	Ymax:   2,
+	Zoom:   1,
+	Width:  1024,
+	Height: 1024,
+}
 
 func main() {
 	web := flag.Bool("web", false, "Run in web mode")
@@ -29,10 +48,40 @@ func main() {
 		fmt.Println("Serving fractals at http://localhost:8080/fractals")
 		log.Fatal(http.ListenAndServe(":8080", nil))
 	} else {
-		drawFractal("mandelbrot.png", mandelbrot)
-		drawFractal("newton.png", newton)
-		drawFractal("acos.png", acos)
-		drawFractal("sqrt.png", sqrt)
+		drawFractal("mandelbrot.png", mandelbrot, defaultOptions)
+		drawFractal("newton.png", newton, defaultOptions)
+		drawFractal("acos.png", acos, defaultOptions)
+		drawFractal("sqrt.png", sqrt, defaultOptions)
+	}
+}
+
+// parseRenderingOptionsFromQuery extracts rendering options from the HTTP request query parameters.
+// It uses default values if the parameters are not provided or invalid.
+func parseRenderingOptionsFromQuery(r *http.Request, def RenderingOptions) RenderingOptions {
+	getFloat := func(key string, defVal float64) float64 {
+		if v := r.URL.Query().Get(key); v != "" {
+			if f, err := strconv.ParseFloat(v, 64); err == nil {
+				return f
+			}
+		}
+		return defVal
+	}
+	getInt := func(key string, defVal int) int {
+		if v := r.URL.Query().Get(key); v != "" {
+			if i, err := strconv.Atoi(v); err == nil {
+				return i
+			}
+		}
+		return defVal
+	}
+	return RenderingOptions{
+		Xmin:   getFloat("xmin", def.Xmin),
+		Xmax:   getFloat("xmax", def.Xmax),
+		Ymin:   getFloat("ymin", def.Ymin),
+		Ymax:   getFloat("ymax", def.Ymax),
+		Zoom:   getFloat("zoom", def.Zoom),
+		Width:  getInt("width", def.Width),
+		Height: getInt("height", def.Height),
 	}
 }
 
@@ -54,24 +103,26 @@ func webHandler(w http.ResponseWriter, r *http.Request) {
 	default:
 		fractalFunc = mandelbrot
 	}
-	renderFractal(w, fractalFunc)
+	opts := parseRenderingOptionsFromQuery(r, defaultOptions)
+	renderFractal(w, fractalFunc, opts)
 }
 
-func drawFractal(filename string, fractalFunc func(complex128) color.Color) {
+func drawFractal(filename string, fractalFunc func(complex128) color.Color, opts RenderingOptions) {
 	handle, _ := os.Create(filename)
 	defer handle.Close() // Close the file when we're done
-	renderFractal(handle, fractalFunc)
+	renderFractal(handle, fractalFunc, opts)
 	fmt.Printf("Successfully drew fractal to %s\n", filename)
 }
 
-func renderFractal(out io.Writer, fractalFunc func(complex128) color.Color) {
-	const (
-		xmin, ymin, xmax, ymax = -2, -2, +2, +2
-		width, height          = 1024, 1024
-	)
-	img := image.NewRGBA(image.Rect(0, 0, width, height))
-	for py := 0; py < height; py++ {
-		for px := 0; px < width; px++ {
+func renderFractal(out io.Writer, fractalFunc func(complex128) color.Color, opts RenderingOptions) {
+	xspan := (opts.Xmax - opts.Xmin) / opts.Zoom
+	yspan := (opts.Ymax - opts.Ymin) / opts.Zoom
+	xstart := (opts.Xmin+opts.Xmax)/2 - xspan/2
+	ystart := (opts.Ymin+opts.Ymax)/2 - yspan/2
+
+	img := image.NewRGBA(image.Rect(0, 0, opts.Width, opts.Height))
+	for py := 0; py < opts.Height; py++ {
+		for px := 0; px < opts.Width; px++ {
 			// x, y represent a pixel. To get the color of the pixel
 			// we can do a supersampling of diving the pixel into 4 subpixels
 			// and averaging the color of the subpixels.
@@ -79,11 +130,10 @@ func renderFractal(out io.Writer, fractalFunc func(complex128) color.Color) {
 			for subpy := 0; subpy < 2; subpy++ {
 				deltay := float64(subpy) / 2.0
 				for subpx := 0; subpx < 2; subpx++ {
-					// Calculate the subpixel coordinates
 					deltax := float64(subpx) / 2.0
-					y := (float64(py)+deltay)/height*(ymax-ymin) + ymin
-					x := (float64(px)+deltax)/width*(xmax-xmin) + xmin
-					// Get the color of the subpixel
+					y := (float64(py)+deltay)/float64(opts.Height)*yspan + ystart
+					x := (float64(px)+deltax)/float64(opts.Width)*xspan + xstart
+					// Get the color for the pixel at (x, y)
 					z := complex(x, y)
 					subpixelColors = append(subpixelColors, fractalFunc(z))
 				}
