@@ -24,7 +24,10 @@ import (
 
 func main() {
 	for i := 1; i < len(os.Args); i++ {
-		fmt.Printf("  %s = %s\n", comma(os.Args[i]), iterativeComma(os.Args[i]))
+		arg := os.Args[i]
+		recursiveResult := addCommas(arg, comma)
+		iterativeResult := addCommas(arg, iterativeComma)
+		fmt.Printf("  %s = %s\n", recursiveResult, iterativeResult)
 	}
 }
 
@@ -36,6 +39,35 @@ func comma(s string) string {
 		return s
 	}
 	return comma(s[:n-3]) + "," + s[n-3:]
+}
+
+func addCommas(s string, commaFunc func(string) string) string {
+	// Handle optional signs and "."
+	if len(s) == 0 {
+		return s
+	}
+	var sign string
+	if s[0] == '+' || s[0] == '-' {
+		sign = string(s[0])
+		s = s[1:]
+	} else {
+		sign = ""
+	}
+	dotLocation := -1
+	for i, c := range s {
+		if c == '.' {
+			dotLocation = i
+			break
+		}
+	}
+	if dotLocation == -1 {
+		return sign + commaFunc(s)
+	} else {
+		// Split the string at the dot and add commas to the integer part.
+		intPart := s[:dotLocation]
+		fracPart := s[dotLocation:]
+		return sign + commaFunc(intPart) + fracPart
+	}
 }
 
 func iterativeComma(s string) string {
