@@ -12,6 +12,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 func main() {
@@ -33,6 +35,11 @@ func main() {
 	eliminateStrings := []string{"a", "b", "b", "c", "c", "c", "d"}
 	eliminateStrings = eliminateAdjacentDuplicates(eliminateStrings)
 	fmt.Println(eliminateStrings) // "[a b c d]"
+
+	// Squash spaces in a byte slice.
+	squashSpacesBytes := []byte("  a   b   c  ")
+	squashed := squashSpaces(squashSpacesBytes)
+	fmt.Printf("%q\n", squashed) // " a b c "
 
 	// Interactive test of reverse.
 	input := bufio.NewScanner(os.Stdin)
@@ -97,6 +104,32 @@ func eliminateAdjacentDuplicates(s []string) []string {
 		}
 	}
 	return s[:j+1] // Return the slice up to the last unique element
+}
+
+// squashSpaces squashes each run of adjacent Unicode spaces in b into a single ASCII space.
+// It returns the new length of the slice.
+func squashSpaces(b []byte) []byte {
+	write := 0
+	read := 0
+	spacePending := false
+
+	for read < len(b) {
+		r, size := utf8.DecodeRune(b[read:])
+		if unicode.IsSpace(r) {
+			if !spacePending {
+				b[write] = ' '
+				write++
+				spacePending = true
+			}
+			// skip this space rune
+		} else {
+			n := utf8.EncodeRune(b[write:], r)
+			write += n
+			spacePending = false
+		}
+		read += size
+	}
+	return b[:write]
 }
 
 //!-rev
