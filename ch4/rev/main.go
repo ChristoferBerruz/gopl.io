@@ -28,6 +28,12 @@ func main() {
 	fmt.Println(s) // "[2 3 4 5 0 1]"
 	//!-slice
 
+	//!+eliminate
+	// Eliminate adjacent duplicates from a slice of strings.
+	eliminateStrings := []string{"a", "b", "b", "c", "c", "c", "d"}
+	eliminateStrings = eliminateAdjacentDuplicates(eliminateStrings)
+	fmt.Println(eliminateStrings) // "[a b c d]"
+
 	// Interactive test of reverse.
 	input := bufio.NewScanner(os.Stdin)
 outer:
@@ -76,6 +82,21 @@ func rotate(s []int, n int) {
 		tmp[i] = s[(i+n)%len(s)]
 	}
 	copy(s, tmp)
+}
+
+// eliminateAdjacentDuplicates removes adjacent duplicates from a slice of ints in-place.
+func eliminateAdjacentDuplicates(s []string) []string {
+	if len(s) == 0 {
+		return s
+	}
+	j := 0 // Index for the last unique element
+	for i := 1; i < len(s); i++ {
+		if s[i] != s[j] { // Compare current with last unique
+			j++         // Move to the next position for unique element
+			s[j] = s[i] // Update the slice with the new unique element
+		}
+	}
+	return s[:j+1] // Return the slice up to the last unique element
 }
 
 //!-rev
