@@ -17,7 +17,7 @@ import (
 func main() {
 	//!+array
 	a := [...]int{0, 1, 2, 3, 4, 5}
-	reverse(a[:])
+	reverseArrayPointer(&a)
 	fmt.Println(a) // "[5 4 3 2 1 0]"
 	//!-array
 
@@ -49,11 +49,20 @@ outer:
 	// NOTE: ignoring potential errors from input.Err()
 }
 
-//!+rev
+// !+rev
 // reverse reverses a slice of ints in place.
 func reverse(s []int) {
 	for i, j := 0, len(s)-1; i < j; i, j = i+1, j-1 {
 		s[i], s[j] = s[j], s[i]
+	}
+}
+
+// reverseArrayPointer reverses an array of ints in place using a pointer.
+func reverseArrayPointer(s *[6]int) {
+	// Note that arrays are of type [N]T, which means that the length
+	// is part of the type. Using *[]int would mean a pointer to a slice
+	for i, j := 0, len(*s)-1; i < j; i, j = i+1, j-1 {
+		(*s)[i], (*s)[j] = (*s)[j], (*s)[i]
 	}
 }
 
