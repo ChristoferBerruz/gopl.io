@@ -24,9 +24,7 @@ func main() {
 	//!+slice
 	s := []int{0, 1, 2, 3, 4, 5}
 	// Rotate s left by two positions.
-	reverse(s[:2])
-	reverse(s[2:])
-	reverse(s)
+	rotate(s, 2)
 	fmt.Println(s) // "[2 3 4 5 0 1]"
 	//!-slice
 
@@ -64,6 +62,20 @@ func reverseArrayPointer(s *[6]int) {
 	for i, j := 0, len(*s)-1; i < j; i, j = i+1, j-1 {
 		(*s)[i], (*s)[j] = (*s)[j], (*s)[i]
 	}
+}
+
+// rotate rotates a slice of ints left by n positions in a single pass.
+func rotate(s []int, n int) {
+	n = n % len(s) // Ensure n is within bounds
+	if n <= 0 || len(s) == 0 {
+		// No rotation needed if n is 0 or slice is empty.
+		return
+	}
+	tmp := make([]int, len(s))
+	for i := 0; i < len(s); i++ {
+		tmp[i] = s[(i+n)%len(s)]
+	}
+	copy(s, tmp)
 }
 
 //!-rev
