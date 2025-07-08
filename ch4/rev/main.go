@@ -41,6 +41,11 @@ func main() {
 	squashed := squashSpaces(squashSpacesBytes)
 	fmt.Printf("%q\n", squashed) // " a b c "
 
+	// Reverse UTF-8 encoded byte slice.
+	someUTF8String := []byte("Hello, 世界")
+	someUTF8String = reverseUTF8(someUTF8String)
+	fmt.Printf("%s\n", string(someUTF8String)) // "界世 ,olleH"
+
 	// Interactive test of reverse.
 	input := bufio.NewScanner(os.Stdin)
 outer:
@@ -130,6 +135,23 @@ func squashSpaces(b []byte) []byte {
 		read += size
 	}
 	return b[:write]
+}
+
+// reverseUTF8 reverses the characters of a UTF-8 encoded []byte slice in place.
+func reverseUTF8(b []byte) []byte {
+	var runes []rune
+	originalSlice := b // Keep the original slice for reference
+	for len(b) > 0 {
+		r, size := utf8.DecodeRune(b)
+		runes = append(runes, r)
+		b = b[size:]
+	}
+	// Reverse runes
+	for i, j := 0, len(runes)-1; i < j; i, j = i+1, j-1 {
+		runes[i], runes[j] = runes[j], runes[i]
+	}
+	copy(originalSlice, []byte(string(runes)))
+	return originalSlice[:]
 }
 
 //!-rev
